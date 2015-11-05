@@ -201,6 +201,16 @@ class Sermepa implements SermepaInterface {
   private $feedbackParameters;
 
   /**
+   * Indicate if reference payment is set.
+   */
+  private $DsMerchantIdentifier;
+
+  /**
+   * Indicate if we should skip payment process (only reference payments)
+   */
+  private $DsMerchantDirectPayment = '';
+
+  /**
    * Initialize the instance.
    *
    * @param string $titular
@@ -370,6 +380,19 @@ class Sermepa implements SermepaInterface {
       'Ds_Merchant_UrlOK' => $this->DsMerchantUrlOK,
     );
 
+
+    // Reference payment.
+    if (!empty($this->DsMerchantIdentifier)) {
+      $parameters['Ds_Merchant_Identifier'] = $this->DsMerchantIdentifier;
+      $merchant_password_prefix = $this->DsMerchantIdentifier;
+      // If this is a complete payment reference request we indicate it.
+      if ($this->DsMerchantDirectPayment) {
+        $parameters['Ds_Merchant_DirectPayment'] = $this->DsMerchantDirectPayment;
+        $merchant_password_prefix .= $this->DsMerchantDirectPayment;
+      }
+      $this->setMerchantPassword($merchant_password_prefix . $this->getMerchantPassword());
+    }
+
     return array_filter($parameters);
   }
 
@@ -429,6 +452,8 @@ class Sermepa implements SermepaInterface {
     foreach ($parameters as $parameter_key => $parameter_value) {
       $this->feedbackParameters[strtoupper($parameter_key)] = $parameter_value;
     }
+    dd('RESPONSE: -------------------------------------------');
+    dd($this->feedbackParameters, 'FEEDBACK PARAMETERS');
   }
 
   /**
@@ -1156,6 +1181,20 @@ class Sermepa implements SermepaInterface {
    */
   public function getUrlOK() {
     return $this->DsMerchantUrlOK;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setMerchantIdentifier($identifier) {
+    return $this->set('DsMerchantIdentifier', $identifier);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setDirectPayment($direct) {
+    return $this->set('DsMerchantDirectPayment', $direct);
   }
 
   /**
