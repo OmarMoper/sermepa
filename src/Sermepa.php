@@ -384,16 +384,18 @@ class Sermepa implements SermepaInterface {
     // Reference payment.
     if (!empty($this->DsMerchantIdentifier)) {
       $parameters['Ds_Merchant_Identifier'] = $this->DsMerchantIdentifier;
-      $merchant_password_prefix = $this->DsMerchantIdentifier;
       // If this is a complete payment reference request we indicate it.
       if ($this->DsMerchantDirectPayment) {
         $parameters['Ds_Merchant_DirectPayment'] = $this->DsMerchantDirectPayment;
-        $merchant_password_prefix .= $this->DsMerchantDirectPayment;
       }
-      $this->setMerchantPassword($merchant_password_prefix . $this->getMerchantPassword());
     }
 
-    return array_filter($parameters);
+    $parameters = array_filter($parameters);
+    if (!empty($parameters['Ds_Merchant_Identifier']) && $parameters['Ds_Merchant_Identifier'] == 'REQUIRED') {
+      $parameters['Ds_Merchant_Amount'] = 0;
+      $parameters['Ds_Merchant_SumTotal'] = 0;
+    }
+    return $parameters;
   }
 
   /**
@@ -452,8 +454,6 @@ class Sermepa implements SermepaInterface {
     foreach ($parameters as $parameter_key => $parameter_value) {
       $this->feedbackParameters[strtoupper($parameter_key)] = $parameter_value;
     }
-    dd('RESPONSE: -------------------------------------------');
-    dd($this->feedbackParameters, 'FEEDBACK PARAMETERS');
   }
 
   /**
@@ -589,7 +589,7 @@ class Sermepa implements SermepaInterface {
     // Convert parameters array to JSON Object.
 
     $parameters = $this->getParameters();
-
+    dd($parameters, 'PARAMETERS!');
     if ($parameters) {
       $json_parameters = json_encode($parameters);
 
