@@ -69,6 +69,10 @@ class Sermepa implements SermepaInterface {
    */
   const SERMEPA_URL_LIVE = 'https://sis.redsys.es/sis/realizarPago';
 
+  const SERMEPA_URL_WEBSERVICE_TEST = 'https://sis-t.redsys.es:25443/sis/services/SerClsWSEntrada/wsdl/SerClsWSEntrada.wsdl';
+  
+  const SERMEPA_URL_WEBSERVICE_LIVE = 'https://sis.redsys.es/sis/services/SerClsWSEntrada';
+
   /**
    * Required. To Euros the last two positions are considered decimal.
    */
@@ -209,6 +213,8 @@ class Sermepa implements SermepaInterface {
    * Indicate if we should skip payment process (only reference payments)
    */
   private $DsMerchantDirectPayment = '';
+
+  private $webservice;
 
   /**
    * Initialize the instance.
@@ -378,23 +384,12 @@ class Sermepa implements SermepaInterface {
       'Ds_Merchant_TransactionType' => $this->DsMerchantTransactionType,
       'Ds_Merchant_UrlKO' => $this->DsMerchantUrlKO,
       'Ds_Merchant_UrlOK' => $this->DsMerchantUrlOK,
+      'Ds_Merchant_Identifier' => $this->DsMerchantIdentifier,
+      'Ds_Merchant_DirectPayment' => $this->DsMerchantDirectPayment,
     );
 
 
-    // Reference payment.
-    if (!empty($this->DsMerchantIdentifier)) {
-      $parameters['Ds_Merchant_Identifier'] = $this->DsMerchantIdentifier;
-      // If this is a complete payment reference request we indicate it.
-      if ($this->DsMerchantDirectPayment) {
-        $parameters['Ds_Merchant_DirectPayment'] = $this->DsMerchantDirectPayment;
-      }
-    }
-
     $parameters = array_filter($parameters);
-    if (!empty($parameters['Ds_Merchant_Identifier']) && $parameters['Ds_Merchant_Identifier'] == 'REQUIRED') {
-      $parameters['Ds_Merchant_Amount'] = 0;
-      $parameters['Ds_Merchant_SumTotal'] = 0;
-    }
     return $parameters;
   }
 
@@ -525,6 +520,7 @@ class Sermepa implements SermepaInterface {
       '7' => 'Pre-authentication',
       '8' => 'Confirmation of pre-authentication',
       '9' => 'Annulment of preauthorization',
+      'A' => 'Reference',
       'O' => 'Authorization delayed',
       'P' => 'Confirmation of authorization in deferred',
       'Q' => 'Delayed authorization Rescission',
@@ -589,7 +585,7 @@ class Sermepa implements SermepaInterface {
     // Convert parameters array to JSON Object.
 
     $parameters = $this->getParameters();
-    dd($parameters, 'PARAMETERS!');
+
     if ($parameters) {
       $json_parameters = json_encode($parameters);
 
@@ -617,6 +613,21 @@ class Sermepa implements SermepaInterface {
     // Generate a keyed hash signature using the HMAC method.
     // PHP 5 >= 5.1.2.
     $signature = hash_hmac('sha256', $merchant_parameters, $merchant_password, TRUE);
+
+    // Return signature in base64.
+    return base64_encode($signature);
+  }
+ /**
+   * {@inheritdoc}
+   */
+  public function composeMerchantSignatureWebservice($data) {
+    // Decode SHA256 merchant password.
+    $merchant_password = base64_decode($this->DsMerchantPassword);
+    //  Encrypts merchant password with order number.
+    $merchant_password = $this->getEncryptedPassword($merchant_password, $this->getOrder());
+    // Generate a keyed hash signature using the HMAC method.
+    // PHP 5 >= 5.1.2.
+    $signature = hash_hmac('sha256', $data, $merchant_password, TRUE);
 
     // Return signature in base64.
     return base64_encode($signature);
@@ -1232,5 +1243,77 @@ class Sermepa implements SermepaInterface {
    */
   public function getSignatureVersion() {
     return self::SERMEPA_DS_SIGNATUREVERSION;
+  }
+
+  /**
+   * Get url from webservice.
+   *
+   * @param string $environment
+   *   Environment.
+   *
+   * @return type
+   */
+  public function getWebServiceUrl($environment) {
+    return $environment == self::SERMEPA_URL_LIVE ? self::SERMEPA_URL_WEBSERVICE_LIVE : self::SERMEPA_URL_WEBSERVICE_TEST;
+  }
+
+
+
+  public function webservice($environment) {
+    if (!isset($this->webservice)) {
+      $this->webservice = new \SoapClient($this->getWebServiceUrl($environment), array('trace' => 1));
+    }
+    return $this->webservice;
+  }
+
+  /**
+   * Get parameters in uppercase.
+   *
+   * Used when data is sent via webservice, it needs.
+   * 
+   * @return array
+   *   Parameters with keys in uppercase.
+   */
+  public function getParametersUppercase() {
+    $parameters = $this->getParameters();
+    $parameters_uppercase = array();
+    foreach ($parameters as $key => $value) {
+      $parameters_uppercase[strtoupper($key)] = $value;
+    }
+    return $parameters_uppercase;
+  }
+
+  /**
+   * Generate XML which can be sent to webservice.
+   *
+   * @return \DomDocument
+   *   Xml.
+   */
+  public function composeReferencePaymentXML() {
+    $parameters = $this->getParametersUppercase();
+
+    $xml = new \DomDocument();
+    $xml->preserveWhiteSpace = TRUE;
+    $xml->formatOutput = TRUE;
+
+    $main_element = $xml->createElement('REQUEST');
+    $xml->appendChild($main_element);
+ 
+    // Build input data parameters.
+    $entrada = $xml->createElement('DATOSENTRADA');
+    foreach ($parameters as $key => $value) {
+      $elem = $xml->createElement($key, $value);
+      $entrada->appendChild($elem);
+    }
+    $main_element->appendChild($entrada);
+
+    // Build signature.
+    $datosEntrada = $xml->getElementsByTagName('DATOSENTRADA')->item(0)->C14N();
+    $signature_version = $xml->createElement('DS_SIGNATUREVERSION', $this->getSignatureVersion());
+    $signature = $xml->createElement('DS_SIGNATURE', $this->composeMerchantSignatureWebservice($datosEntrada));
+    $main_element->appendChild($signature_version);
+    $main_element->appendChild($signature);
+
+    return $xml;
   }
 }
