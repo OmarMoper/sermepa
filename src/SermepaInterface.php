@@ -33,12 +33,31 @@ interface SermepaInterface {
   public static function getAvailableEnvironments();
 
   /**
+   * Get all available payment methods.
+   *
+   * @return array
+   *   Return an array with all available payment methods.
+   */
+  public static function getAvailablePaymentMethods();
+
+  /**
    * Get all available transaction types.
    *
    * @return array
    *   Return an array with all available transaction types.
    */
   public static function getAvailableTransactionTypes();
+
+  /**
+   * Get the Sermepa feedback from GET + POST parameters.
+   *
+   * @return array
+   *   An associative array containing the Sermepa feedback taken from the
+   *   $_GET and $_POST superglobals, excluding 'q'.
+   *   Returns FALSE if the Ds_SignatureVersion parameter is missing
+   *   (indicating missing or invalid Sermepa feedback).
+   */
+  public static function getFeedback();
 
   /**
    * Get merchant code maxlength.
@@ -73,7 +92,21 @@ interface SermepaInterface {
   public static function getMerchantTerminalMaxLength();
 
   /**
-   * Check if callback feedback is valid.
+   * Handle the response of the payment transaction.
+   *
+   * Messages from "Manual de integración con el TPV Virtual para comercios con
+   *  conexión por Redirección" v1.0 - 10/06/2015.
+   *
+   * @param integer $response
+   *   The response feedback code.
+   *
+   * @return string
+   *   The handle response message.
+   */
+  public static function handleResponse($response = NULL);
+
+  /**
+   * Check if callback feedback signature is valid.
    *
    * @param array $feedback
    *   An associative array containing the Sermepa feedback taken from the
@@ -84,7 +117,7 @@ interface SermepaInterface {
    *
    * @throws \CommerceRedsys\Payment\SermepaException
    */
-  public function checkFeedback($feedback);
+  public function validSignatures($feedback);
 
   /**
    * Compose the merchant parameters.
@@ -114,29 +147,32 @@ interface SermepaInterface {
   public function composeMerchantSignatureFromFeedback($encoded_parameters);
 
   /**
-   * Get the Sermepa feedback from GET + POST parameters.
+   * Decode Ds_MerchantParameters.
+   *
+   * @param string $encoded_parameters
+   *   The encoded Ds_MerchantParameters.
    *
    * @return array
-   *   An associative array containing the Sermepa feedback taken from the
-   *   $_GET and $_POST superglobals, excluding 'q'.
-   *   Returns FALSE if the Ds_SignatureVersion parameter is missing
-   *   (indicating missing or invalid Sermepa feedback).
+   *   An associative array of merchant parameters values:
+   *   - Ds_Date: Transaction date (dd/mm/yyyy).
+   *   - Ds_Hour: Transaction time (HH:mm).
+   *   - Ds_Amount: Same of the transaction.
+   *   - Ds_Currency: Same of the transaction.
+   *   - Ds_Order: Same of the transaction.
+   *   - Ds_MerchantCode: Same of the transaction.
+   *   - Ds_Terminal: Assigned by Sermepa.
+   *   - Ds_Response: Response values, see $this->handleResponse.
+   *   - Ds_MerchantData: Optional sended from commerce form.
+   *   - Ds_SecurePayment: 0 for no secure payment, 1 for secure.
+   *   - Ds_TrasactionType: Trasaction type sended from commerce form.
+   *   - Ds_Card_Country: (Optional) Country of issuance of the card that has
+   *       tried to make the payment..
+   *   - Ds_AuthorisationCode: (Optional) Assigned authorisation code.
+   *   - Ds_ConsumerLanguage: (Optional) 0 indicates that has not been
+   *       determined the customer's language..
+   *   - Ds_Card_Type: (Optional) C for credit, D for debit.
    */
-  public function getFeedback();
-
-  /**
-   * Handle the response of the payment transaction.
-   *
-   * Messages from "Manual de integración con el TPV Virtual para comercios con
-   *  conexión por Redirección" v1.0 - 10/06/2015.
-   *
-   * @param integer $response
-   *   The response feedback code.
-   *
-   * @return string
-   *   The handle response message.
-   */
-  public function handleResponse($response = NULL);
+  public function decodeMerchantParameters($encoded_parameters);
 
   /**
    * Setter for Sermepa::DsMerchantAmount property.
@@ -412,6 +448,27 @@ interface SermepaInterface {
   public function getProductDescription();
 
   /**
+   * Setter for Sermepa::DsMerchantPaymentMethod property.
+   *
+   * @param string $payment_methods
+   *   The property to set.
+   *
+   * @return Sermepa
+   *   Return itself.
+   *
+   * @throws \CommerceRedsys\Payment\SermepaException
+   */
+  public function setPaymentMethod($payment_methods);
+
+  /**
+   * Getter for Sermepa::DsMerchantPaymentMethod property.
+   *
+   * @return string
+   *   Return the requested property.
+   */
+  public function getPaymentMethod();
+
+  /**
    * Setter for Sermepa::DsMerchantSumTotal property.
    *
    * @param integer $sum_total
@@ -549,6 +606,7 @@ interface SermepaInterface {
    * @throws \CommerceRedsys\Payment\SermepaException
    */
   public function setUrlOK($url_ok);
+
   /**
    * Getter for Sermepa::DsMerchantUrlOK property.
    *
@@ -556,16 +614,7 @@ interface SermepaInterface {
    *   Return the requested property.
    */
   public function getUrlOK();
-  /**
-   * Getter for Sermepa::feedbackParameters property.
-   *
-   * @param string $key
-   *   The array key value to get.
-   *
-   * @return string
-   *   Return the requested array value.
-   */
-  public function getFeedbackValue($key);
+
   /**
    * Setter for Sermepa::environment property.
    *
@@ -578,6 +627,7 @@ interface SermepaInterface {
    * @throws \CommerceRedsys\Payment\SermepaException
    */
   public function setEnvironment($environment);
+
   /**
    * Getter for Sermepa::environment property.
    *
